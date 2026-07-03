@@ -1,0 +1,8 @@
+description: NEC IR transmit behavior
+compatible: "zmk,behavior-ir-tx"
+include: two_param.yaml
+
+properties:
+  locality:
+    type: string
+    default: "global"

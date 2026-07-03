@@ -1,0 +1,63 @@
+# ============================================================================
+#  IR TX -- NEC transmit behavior
+# ============================================================================
+config ZMK_BEHAVIOR_IR_TX
+    bool "ZMK IR TX behavior (NEC)"
+    default y
+    depends on DT_HAS_ZMK_BEHAVIOR_IR_TX_ENABLED
+
+config IR_TX_REPEAT_COUNT
+    int "Number of full NEC frames to send per key press"
+    depends on ZMK_BEHAVIOR_IR_TX
+    default 3
+    range 1 10
+    help
+      How many times the complete NEC frame is transmitted for a single key
+      press. The remote codes used here are idempotent direct-select commands,
+      so sending the frame a few times improves the odds one gets through when
+      the IR signal is occasionally missed, without changing the result. Each
+      extra frame adds roughly 70ms (frame) + a ~58ms inter-frame gap.
+
+config IR_TX_THREAD_STACK_SIZE
+    int "IR TX dedicated work queue stack size"
+    depends on ZMK_BEHAVIOR_IR_TX
+    default 1024
+
+config IR_TX_THREAD_PRIORITY
+    int "IR TX dedicated work queue thread priority"
+    depends on ZMK_BEHAVIOR_IR_TX
+    default -1
+    help
+      The IR send bit-bangs the NEC envelope with busy-waits, so its timing must
+      NOT be preempted by ordinary threads or the carrier mark/space lengths get
+      stretched and the receiver can't decode the frame. Hence a cooperative
+      (negative) priority. It runs on its OWN work queue (not the shared system
+      one) so that during the k_sleep inter-frame gaps the system work queue is
+      free to do other work. Only ISRs and higher cooperative threads (e.g. the
+      BLE stack) interrupt it; lower-priority threads pause during each ~70ms
+      frame and catch up in the gaps. A preemptible (>=0) priority makes the
+      rest of the system more responsive but corrupts the IR waveform.
+
+# ============================================================================
+#  IR RX -- NEC receive + decode driver
+# ============================================================================
+menuconfig IR_RX
+    bool "IR receiver (38kHz demodulated) capture + NEC decode"
+    depends on DT_HAS_ZMK_IR_RX_ENABLED
+    help
+        Capture a 38kHz IR receiver's demodulated digital output (e.g.
+        OSRB38C9AA) by timing its edges, decode the NEC32 frame used by the IR
+        TX behavior (customer + data), and log the result. Useful for reading
+        remote codes.
+
+if IR_RX
+
+config IR_RX_INIT_PRIORITY
+    int "IR RX driver init priority"
+    default 90
+
+module = IR_RX
+module-str = IR_RX
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # IR_RX

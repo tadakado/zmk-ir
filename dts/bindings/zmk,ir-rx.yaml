@@ -1,0 +1,12 @@
+description: 38kHz IR receiver (demodulated digital output) capture + NEC decoder
+
+compatible: "zmk,ir-rx"
+
+properties:
+  in-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      IR receiver demodulated output pin. The receiver idles high and pulls low
+      while a 38kHz carrier is present (active low). Declared GPIO_ACTIVE_HIGH so
+      the driver reads the raw physical level when timing edges.
