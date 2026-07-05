@@ -80,9 +80,39 @@ you like.
 | Kconfig | Default | Description |
 |---|---|---|
 | `CONFIG_ZMK_BEHAVIOR_IR_TX` | `y` when the node exists | Enable the TX behavior. |
-| `CONFIG_IR_TX_REPEAT_COUNT` | `3` | Full NEC frames sent per press (idempotent codes → redundancy against a missed frame). |
+| `CONFIG_IR_TX_REPEAT_COUNT` | `3` | Repeats per press. See `IR_TX_USE_REPEAT_CODE`. |
+| `CONFIG_IR_TX_USE_REPEAT_CODE` | `n` | `n`: send the whole frame `REPEAT_COUNT` times. `y`: send the frame once + `REPEAT_COUNT` NEC repeat codes (real held-button behaviour), `FRAME_COUNT` times. |
+| `CONFIG_IR_TX_FRAME_COUNT` | `1` | (repeat-code mode) how many `frame + repeats` sets to send. |
 | `CONFIG_IR_TX_THREAD_STACK_SIZE` | `1024` | Dedicated work-queue stack. |
 | `CONFIG_IR_TX_THREAD_PRIORITY` | `-1` | Cooperative priority (the bit-bang waveform must not be preempted). |
+| `CONFIG_IR_TX_HW_PWM` | `n` | Use the nRF hardware-PWM backend instead of bit-bang (see below). |
+| `CONFIG_IR_TX_HW_PWM_PIN` | `33` | (HW-PWM) nRF pin driving the IR LED, `port*32 + pin` (P1.01 = 33, P0.10 = 10). |
+
+### Hardware-PWM backend (nRF only)
+
+By default the NEC envelope is **bit-banged** with `k_busy_wait`. That is portable,
+but the mark/space timing is only as good as the CPU's — if another cooperative
+thread or a burst of interrupts (e.g. a BLE radio sharing the SoC) preempts the
+send, the carrier stretches and the receiver can't decode the frame.
+
+`CONFIG_IR_TX_HW_PWM=y` switches to an **nRF-specific** backend: the whole frame
+is precomputed into a per-carrier-period duty-cycle buffer in RAM and played by
+the PWM peripheral's EasyDMA. The hardware clocks the 38 kHz carrier, so the
+waveform is immune to interrupt jitter and the CPU is free during the ~70 ms
+send. Cost: ~7 KB RAM for the buffer, and it only runs on nRF SoCs.
+
+The nrfx driver owns the PWM peripheral directly, so with this enabled you must
+**not** let Zephyr's PWM driver own the same instance — drop the `&pwm0` /
+`pwm-leds` / `irpwm` devicetree setup above and configure the pin via Kconfig:
+
+```ini
+CONFIG_IR_TX_HW_PWM=y
+CONFIG_IR_TX_HW_PWM_PIN=33   # P1.01
+CONFIG_PWM=n                 # release PWM0 from the Zephyr PWM driver
+CONFIG_NRFX_PWM0=y           # selected automatically by IR_TX_HW_PWM
+```
+
+The bit-bang path stays the default and remains as a portable reference.
 
 ---
 

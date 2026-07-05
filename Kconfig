@@ -7,16 +7,61 @@ config ZMK_BEHAVIOR_IR_TX
     depends on DT_HAS_ZMK_BEHAVIOR_IR_TX_ENABLED
 
 config IR_TX_REPEAT_COUNT
-    int "Number of full NEC frames to send per key press"
+    int "IR TX repeat count per key press"
     depends on ZMK_BEHAVIOR_IR_TX
     default 3
     range 1 10
     help
-      How many times the complete NEC frame is transmitted for a single key
-      press. The remote codes used here are idempotent direct-select commands,
-      so sending the frame a few times improves the odds one gets through when
-      the IR signal is occasionally missed, without changing the result. Each
-      extra frame adds roughly 70ms (frame) + a ~58ms inter-frame gap.
+      Number of repeats sent for a single key press. With IR_TX_USE_REPEAT_CODE
+      disabled (default) this is how many times the complete NEC frame is
+      transmitted (each ~70ms frame + a ~58ms gap). With it enabled, it is how
+      many NEC repeat codes follow the initial frame.
+
+config IR_TX_USE_REPEAT_CODE
+    bool "Send NEC repeat codes after the frame (held-button behaviour)"
+    depends on ZMK_BEHAVIOR_IR_TX
+    default n
+    help
+      When enabled, a key press sends IR_TX_FRAME_COUNT "sets", each being one
+      full NEC frame followed by IR_TX_REPEAT_COUNT NEC "repeat" codes (9ms
+      leader + 2.25ms space), the whole stream spaced at the standard ~108ms NEC
+      period -- i.e. what a real remote sends while a button is held (with the
+      frame re-asserted at the start of each set). When disabled (default), the
+      full frame is simply sent IR_TX_REPEAT_COUNT times instead.
+
+config IR_TX_FRAME_COUNT
+    int "Number of frame+repeats sets per key press (repeat-code mode)"
+    depends on IR_TX_USE_REPEAT_CODE
+    default 1
+    range 1 10
+    help
+      In repeat-code mode, how many times the (full frame + IR_TX_REPEAT_COUNT
+      repeat codes) set is sent. 1 = one frame then repeats (plain held-button).
+      >1 re-sends the full frame periodically for extra robustness, e.g. 5 sets
+      of a frame + 5 repeats = 5 frames + 25 repeat codes.
+
+config IR_TX_HW_PWM
+    bool "Generate the NEC waveform with hardware PWM (nRF EasyDMA) instead of bit-bang"
+    depends on ZMK_BEHAVIOR_IR_TX
+    depends on HAS_NRFX
+    select NRFX_PWM0
+    default n
+    help
+      Play the NEC waveform from a RAM duty-cycle buffer via the nRF PWM
+      peripheral's EasyDMA sequence, instead of CPU busy-wait bit-banging. The
+      hardware clocks the carrier, so the waveform is immune to interrupt jitter
+      (BLE radio etc.) and the CPU is free during the send. nRF-only; uses a
+      ~7KB RAM buffer. The bit-bang path (default) stays as a portable reference.
+      Drive the IR LED via IR_TX_HW_PWM_PIN, and do NOT also let Zephyr's PWM
+      driver own PWM0 (nrfx owns it here) -- i.e. don't include the Zephyr
+      pwm0/pwm-leds devicetree setup when this is enabled.
+
+config IR_TX_HW_PWM_PIN
+    int "IR LED pin for hardware PWM (nRF pin number = port*32 + pin)"
+    depends on IR_TX_HW_PWM
+    default 33
+    help
+      Raw nRF GPIO pin the PWM carrier drives. Examples: P1.01 = 33, P0.10 = 10.
 
 config IR_TX_THREAD_STACK_SIZE
     int "IR TX dedicated work queue stack size"
